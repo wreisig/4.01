@@ -1,1 +1,4 @@
 .env
+*.exe
+*.o
+build.log*
