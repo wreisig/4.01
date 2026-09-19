@@ -66,23 +66,31 @@ static void append_html(char *buf, size_t cap, size_t *used, const char *text) {
 }
 
 static char *env_value(const char *name) {
-    char line[700], key[100], *value;
+    char line[700], key[100], raw_value[600], *value, *start, *end;
     FILE *f;
     value = getenv(name);
     if (value && *value) return strdup(value);
     f = fopen(".env", "r");
     if (!f) return NULL;
     while (fgets(line, sizeof(line), f)) {
-        if (sscanf(line, "%99[^=]=%699[^\r\n]", key, line) == 2 &&
+        if (sscanf(line, "%99[^=]=%599[^\r\n]", key, raw_value) == 2 &&
                 strcmp(key, name) == 0) {
             fclose(f);
-            value = strdup(line);
+            value = strdup(raw_value);
             if (value && value[0] == '"') {
                 size_t length = strlen(value);
                 if (length > 1 && value[length - 1] == '"') {
                     value[length - 1] = '\0';
                     memmove(value, value + 1, length - 1);
                 }
+            }
+            if (value) {
+                start = value;
+                while (*start == ' ' || *start == '\t') start++;
+                end = start + strlen(start);
+                while (end > start && (end[-1] == ' ' || end[-1] == '\t')) end--;
+                *end = '\0';
+                if (start != value) memmove(value, start, (size_t) (end - start) + 1);
             }
             return value;
         }
@@ -216,7 +224,7 @@ static void canvas_fn(struct mg_connection *c, int ev, void *ev_data) {
     if (ev == MG_EV_CONNECT) {
         struct mg_tls_opts tls = {.name = mg_str(s->host)};
         mg_tls_init(c, &tls);
-        mg_printf(c, "GET %s HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nAccept: application/json\r\nConnection: close\r\n\r\n", s->next_url, s->host, s->token);
+        mg_printf(c, "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Canvas-Due-Soon/1.0\r\nAuthorization: Bearer %s\r\nAccept: application/json\r\nConnection: close\r\n\r\n", s->next_url, s->host, s->token);
     } else if (ev == MG_EV_HTTP_MSG) {
         struct mg_http_message *hm = (struct mg_http_message *) ev_data;
         s->status = mg_http_status(hm);
@@ -243,8 +251,11 @@ static void canvas_fn(struct mg_connection *c, int ev, void *ev_data) {
             }
         }
     } else if (ev == MG_EV_ERROR || ev == MG_EV_CLOSE) {
-        if (ev == MG_EV_ERROR && !s->failed) set_error(s, "Could not reach Canvas. Check your network connection and CANVAS_BASE_URL.");
-        if (ev == MG_EV_ERROR) render_error(s);
+        if (ev == MG_EV_ERROR && !s->failed) {
+            const char *detail = ev_data ? (const char *) ev_data : "unknown connection error";
+            set_error(s, "Canvas connection error: %s", detail);
+            render_error(s);
+        }
     }
     (void) ev_data;
 }
@@ -288,6 +299,9 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
 int main(void) {
     struct mg_mgr mgr;
     mg_mgr_init(&mgr);
+    // Mongoose's built-in TLS uses mg_now() for certificate dates. On desktop
+    // builds, seed its boot timestamp from the operating system clock.
+    mg_boot_timestamp_ms = (uint64_t) time(NULL) * 1000 - mg_millis();
     if (!mg_http_listen(&mgr, "http://localhost:8080", fn, NULL)) return 1;
     for (;;) mg_mgr_poll(&mgr, 1000);
     mg_mgr_free(&mgr);
