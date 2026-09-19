@@ -41,6 +41,6 @@ Both requests use bearer-token authentication. The app follows Canvas `Link` hea
 
 ## Reflection
 
-This project taught me how to authenticate with a REST API using a bearer token and how to parse JSON in C. The most challenging part was handling asynchronous HTTPS requests and Canvas pagination through the `Link` response header.
+It's interesting just how versatile the Mongoose/C stack is. I was considering switching stacks and frameworks for this assignment, but I wanted to stick with what I had before. 
 
-With more time, I would add tests, caching, and a page showing upcoming assignments across all courses. I would also use OAuth so users would not need to manage personal access tokens manually.
+The whole Canvas token system is interesting to me. I've been using Canvas for years and I've never interacted with the security tokens before. I'm surprised that having your token exposed could give someone full access to your account, considering that we use MFA with Microsoft authenticator. 
